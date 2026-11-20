@@ -1,0 +1,19 @@
+{
+  "totalPageViews": 4,
+  "daily": {
+    "2026-11-19": {
+      "visitors": [
+        "v_2rssaiibx"
+      ],
+      "pageViews": 4,
+      "adImpressions": 0,
+      "downloads": 0
+    }
+  },
+  "pages": {
+    "home": 3,
+    "lessons": 1
+  },
+  "adSlots": {},
+  "resources": {}
+}

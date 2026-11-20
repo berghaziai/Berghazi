@@ -1,0 +1,11 @@
+[
+  {
+    "id": "msg_1795112145453_0fb023",
+    "name": "Audit Checker",
+    "email": "audit@example.com",
+    "subject": "Security Verification",
+    "message": "Automated audit verification message.",
+    "status": "unread",
+    "createdAt": "2026-11-19T18:15:45.454Z"
+  }
+]

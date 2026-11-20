@@ -1,0 +1,803 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Pillar 4.1: Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Startup connectivity verification endpoint
+    match /test/{docId} {
+      allow get: if docId == 'connection';
+    }
+
+    // -------------------------------------------------------------------------
+    // Global Security Primitives
+    // -------------------------------------------------------------------------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isMainAdminEmail() {
+      return isEmailVerified() && request.auth.token.email == 'berghazi9@gmail.com';
+    }
+
+    function userExists(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid));
+    }
+
+    function userDoc(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+
+    function isNotSuspended() {
+      return isSignedIn() && (!userExists(request.auth.uid) || userDoc(request.auth.uid).isSuspended == false);
+    }
+
+    function isMainAdmin() {
+      return isMainAdminEmail() || (
+        isEmailVerified() &&
+        userExists(request.auth.uid) &&
+        userDoc(request.auth.uid).role == 'main_admin' &&
+        userDoc(request.auth.uid).email == 'berghazi9@gmail.com'
+      );
+    }
+
+    function hasPerm(permName) {
+      return isEmailVerified() &&
+        userExists(request.auth.uid) &&
+        userDoc(request.auth.uid).isSuspended == false &&
+        userDoc(request.auth.uid).role == 'assistant_admin' &&
+        userDoc(request.auth.uid).permissions[permName] == true;
+    }
+
+    function isAdminAny() {
+      return isMainAdmin() || (
+        isEmailVerified() &&
+        userExists(request.auth.uid) &&
+        userDoc(request.auth.uid).isSuspended == false &&
+        userDoc(request.auth.uid).role == 'assistant_admin'
+      );
+    }
+
+    function isLessonManager() {
+      return isMainAdmin() || hasPerm('manageLessons');
+    }
+
+    function isDocumentManager() {
+      return isMainAdmin() || hasPerm('manageDocuments');
+    }
+
+    function isResearchModerator() {
+      return isMainAdmin() || hasPerm('manageResearch');
+    }
+
+    function isUserManager() {
+      return isMainAdmin() || hasPerm('manageUsers');
+    }
+
+    function isMonetizationManager() {
+      return isMainAdmin() || hasPerm('manageMonetization');
+    }
+
+    function isAnalyticsViewer() {
+      return isMainAdmin() || hasPerm('viewAnalytics');
+    }
+
+    function canSubmitResearch() {
+      return isEmailVerified() &&
+        userExists(request.auth.uid) &&
+        userDoc(request.auth.uid).isSuspended == false &&
+        userDoc(request.auth.uid).role in ['main_admin', 'assistant_admin', 'page_writer', 'permanent_member'];
+    }
+
+    function canAutoPublish() {
+      return isMainAdmin() ||
+        hasPerm('manageResearch') ||
+        (userExists(request.auth.uid) && userDoc(request.auth.uid).role == 'page_writer' && userDoc(request.auth.uid).permissions.publishDirectly == true);
+    }
+
+    // -------------------------------------------------------------------------
+    // Entity Validation Helpers (Pillar 2)
+    // -------------------------------------------------------------------------
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'permissions', 'subscriptionTier', 'isSuspended', 'preferredLanguage', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'photoURL', 'role', 'permissions', 'schoolName', 'institution', 'academicYear', 'city', 'bio', 'subscriptionTier', 'subscriptionExpiresAt', 'isSuspended', 'preferredLanguage', 'createdAt', 'updatedAt'])
+        && data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 200
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120
+        && (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 500))
+        && data.role in ['main_admin', 'assistant_admin', 'page_writer', 'permanent_member', 'ordinary_member']
+        && data.permissions is map
+        && (!('schoolName' in data) || (data.schoolName is string && data.schoolName.size() <= 160))
+        && (!('institution' in data) || (data.institution is string && data.institution.size() <= 160))
+        && (!('academicYear' in data) || (data.academicYear is string && data.academicYear.size() <= 32))
+        && (!('city' in data) || (data.city is string && data.city.size() <= 100))
+        && (!('bio' in data) || (data.bio is string && data.bio.size() <= 1000))
+        && data.subscriptionTier in ['free', 'premium', 'institutional']
+        && (!('subscriptionExpiresAt' in data) || (data.subscriptionExpiresAt is string && data.subscriptionExpiresAt.size() <= 64))
+        && data.isSuspended is bool
+        && data.preferredLanguage in ['zgh', 'ar', 'en']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPublicProfile(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'role', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'displayName', 'role', 'institution', 'bio', 'photoURL', 'createdAt', 'updatedAt'])
+        && data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120
+        && data.role in ['main_admin', 'assistant_admin', 'page_writer', 'permanent_member', 'ordinary_member']
+        && (!('institution' in data) || (data.institution is string && data.institution.size() <= 160))
+        && (!('bio' in data) || (data.bio is string && data.bio.size() <= 1000))
+        && (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 500))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidRoleDefinition(data) {
+      return data.keys().hasAll(['id', 'labelEn', 'labelAr', 'labelZgh', 'rank', 'defaultPermissions', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'labelEn', 'labelAr', 'labelZgh', 'description', 'rank', 'defaultPermissions', 'updatedAt'])
+        && data.id in ['main_admin', 'assistant_admin', 'page_writer', 'permanent_member', 'ordinary_member']
+        && data.labelEn is string && data.labelEn.size() >= 1 && data.labelEn.size() <= 100
+        && data.labelAr is string && data.labelAr.size() >= 1 && data.labelAr.size() <= 100
+        && data.labelZgh is string && data.labelZgh.size() >= 1 && data.labelZgh.size() <= 100
+        && (!('description' in data) || (data.description is string && data.description.size() <= 500))
+        && data.rank is int && data.rank >= 1 && data.rank <= 10
+        && data.defaultPermissions is map
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPathway(data) {
+      return data.keys().hasAll(['number', 'titleEn', 'titleAr', 'titleZgh', 'levels', 'weeksCount', 'partsCount', 'isActive', 'updatedAt'])
+        && data.keys().hasOnly(['number', 'titleEn', 'titleAr', 'titleZgh', 'description', 'levels', 'weeksCount', 'partsCount', 'isActive', 'updatedAt'])
+        && data.number is int && data.number >= 1 && data.number <= 6
+        && data.titleEn is string && data.titleEn.size() >= 1 && data.titleEn.size() <= 140
+        && data.titleAr is string && data.titleAr.size() >= 1 && data.titleAr.size() <= 140
+        && data.titleZgh is string && data.titleZgh.size() >= 1 && data.titleZgh.size() <= 140
+        && (!('description' in data) || (data.description is string && data.description.size() <= 600))
+        && data.levels is list && data.levels.size() >= 1 && data.levels.size() <= 12 && data.levels[0] is string
+        && data.weeksCount is int && data.weeksCount == 6
+        && data.partsCount is int && data.partsCount == 2
+        && data.isActive is bool
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidLesson(data) {
+      return data.keys().hasAll(['pathway', 'level', 'week', 'part', 'title', 'fileUrl', 'fileName', 'fileFormat', 'accessTier', 'allowDownload', 'isPublished', 'downloadCount', 'uploadedByUid', 'uploadedByName', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['pathway', 'level', 'stage', 'week', 'part', 'title', 'titleZgh', 'titleAr', 'titleEn', 'description', 'fileUrl', 'fileName', 'fileFormat', 'fileSize', 'accessTier', 'price', 'currency', 'allowDownload', 'isPublished', 'downloadCount', 'uploadedByUid', 'uploadedByName', 'createdAt', 'updatedAt'])
+        && data.pathway is int && data.pathway >= 1 && data.pathway <= 6
+        && data.level is string && data.level.size() >= 1 && data.level.size() <= 64
+        && (!('stage' in data) || (data.stage is int && data.stage >= 1 && data.stage <= 6))
+        && data.week is int && data.week >= 1 && data.week <= 6
+        && data.part is int && data.part >= 1 && data.part <= 2
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 200
+        && (!('titleZgh' in data) || (data.titleZgh is string && data.titleZgh.size() <= 200))
+        && (!('titleAr' in data) || (data.titleAr is string && data.titleAr.size() <= 200))
+        && (!('titleEn' in data) || (data.titleEn is string && data.titleEn.size() <= 200))
+        && (!('description' in data) || (data.description is string && data.description.size() <= 2000))
+        && data.fileUrl is string && data.fileUrl.size() >= 1 && data.fileUrl.size() <= 1000
+        && data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 255
+        && data.fileFormat in ['pdf', 'pptx', 'docx', 'image', 'other']
+        && (!('fileSize' in data) || (data.fileSize is int && data.fileSize >= 0))
+        && data.accessTier in ['public_free', 'registered_free', 'paid_single', 'premium_only']
+        && (!('price' in data) || (data.price is number && data.price >= 0))
+        && (!('currency' in data) || data.currency in ['MAD', 'USD', 'EUR'])
+        && data.allowDownload is bool
+        && data.isPublished is bool
+        && data.downloadCount is int && data.downloadCount >= 0
+        && data.uploadedByUid is string && data.uploadedByUid.size() >= 1 && data.uploadedByUid.size() <= 128
+        && data.uploadedByName is string && data.uploadedByName.size() >= 1 && data.uploadedByName.size() <= 120
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidDocumentTemplate(data) {
+      return data.keys().hasAll(['docType', 'pathway', 'level', 'week', 'part', 'title', 'templateFileUrl', 'templateFileName', 'templateFormat', 'accessTier', 'isPublished', 'downloadCount', 'uploadedByUid', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['docType', 'pathway', 'level', 'week', 'part', 'title', 'description', 'templateFileUrl', 'templateFileName', 'templateFormat', 'accessTier', 'price', 'currency', 'isPublished', 'downloadCount', 'uploadedByUid', 'createdAt', 'updatedAt'])
+        && data.docType in ['mind_map', 'annual_distribution', 'periodic_distribution']
+        && data.pathway is int && data.pathway >= 1 && data.pathway <= 6
+        && data.level is string && data.level.size() >= 1 && data.level.size() <= 64
+        && data.week is int && data.week >= 0 && data.week <= 6
+        && data.part is int && data.part >= 0 && data.part <= 2
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 200
+        && (!('description' in data) || (data.description is string && data.description.size() <= 2000))
+        && data.templateFileUrl is string && data.templateFileUrl.size() >= 1 && data.templateFileUrl.size() <= 1000
+        && data.templateFileName is string && data.templateFileName.size() >= 1 && data.templateFileName.size() <= 255
+        && data.templateFormat in ['png', 'jpg', 'svg', 'pdf', 'docx', 'pptx']
+        && data.accessTier in ['public_free', 'registered_free', 'paid_single', 'premium_only']
+        && (!('price' in data) || (data.price is number && data.price >= 0))
+        && (!('currency' in data) || data.currency in ['MAD', 'USD', 'EUR'])
+        && data.isPublished is bool
+        && data.downloadCount is int && data.downloadCount >= 0
+        && data.uploadedByUid is string && data.uploadedByUid.size() >= 1 && data.uploadedByUid.size() <= 128
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidResearchArticle(data) {
+      return data.keys().hasAll(['kind', 'title', 'authorUid', 'authorName', 'abstract', 'content', 'category', 'language', 'publicationDate', 'status', 'likesCount', 'commentsCount', 'reportsCount', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['kind', 'title', 'authorUid', 'authorName', 'abstract', 'content', 'category', 'language', 'publicationDate', 'coverImageUrl', 'attachmentUrl', 'attachmentName', 'referencesText', 'status', 'likesCount', 'commentsCount', 'reportsCount', 'createdAt', 'updatedAt'])
+        && data.kind in ['research', 'culture']
+        && data.title is string && data.title.size() >= 3 && data.title.size() <= 240
+        && data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128
+        && data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 120
+        && data.abstract is string && data.abstract.size() >= 10 && data.abstract.size() <= 1500
+        && data.content is string && data.content.size() >= 20 && data.content.size() <= 30000
+        && data.category is string && data.category.size() >= 1 && data.category.size() <= 80
+        && data.language in ['zgh', 'ar', 'en']
+        && data.publicationDate is string && data.publicationDate.size() >= 4 && data.publicationDate.size() <= 40
+        && (!('coverImageUrl' in data) || (data.coverImageUrl is string && data.coverImageUrl.size() <= 1000))
+        && (!('attachmentUrl' in data) || (data.attachmentUrl is string && data.attachmentUrl.size() <= 1000))
+        && (!('attachmentName' in data) || (data.attachmentName is string && data.attachmentName.size() <= 255))
+        && (!('referencesText' in data) || (data.referencesText is string && data.referencesText.size() <= 4000))
+        && data.status in ['pending', 'approved', 'rejected']
+        && data.likesCount is int && data.likesCount >= 0
+        && data.commentsCount is int && data.commentsCount >= 0
+        && data.reportsCount is int && data.reportsCount >= 0
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAnalyticsDaily(data) {
+      return data.keys().hasAll(['date', 'pageViews', 'downloads', 'adImpressions', 'updatedAt'])
+        && data.keys().hasOnly(['date', 'pageViews', 'downloads', 'adImpressions', 'updatedAt'])
+        && data.date is string && data.date.size() == 10
+        && data.pageViews is int && data.pageViews >= 0
+        && data.downloads is int && data.downloads >= 0
+        && data.adImpressions is int && data.adImpressions >= 0
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidComment(data) {
+      return data.keys().hasAll(['articleId', 'authorUid', 'authorName', 'content', 'createdAt'])
+        && data.keys().hasOnly(['articleId', 'authorUid', 'authorName', 'content', 'createdAt'])
+        && isValidId(data.articleId)
+        && data.authorUid is string && data.authorUid == request.auth.uid
+        && data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 120
+        && data.content is string && data.content.size() >= 1 && data.content.size() <= 2000
+        && data.createdAt is timestamp;
+    }
+
+    function isValidLike(data) {
+      return data.keys().hasAll(['articleId', 'userUid', 'createdAt'])
+        && data.keys().hasOnly(['articleId', 'userUid', 'createdAt'])
+        && isValidId(data.articleId)
+        && data.userUid is string && data.userUid == request.auth.uid
+        && data.createdAt is timestamp;
+    }
+
+    function isValidBookmark(data) {
+      return data.keys().hasAll(['userUid', 'itemId', 'itemType', 'title', 'createdAt'])
+        && data.keys().hasOnly(['userUid', 'itemId', 'itemType', 'title', 'createdAt'])
+        && data.userUid is string && data.userUid == request.auth.uid
+        && isValidId(data.itemId)
+        && data.itemType in ['research', 'lesson', 'document']
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 240
+        && data.createdAt is timestamp;
+    }
+
+    function isValidReport(data) {
+      return data.keys().hasAll(['articleId', 'reporterUid', 'reason', 'status', 'createdAt'])
+        && data.keys().hasOnly(['articleId', 'articleTitle', 'reporterUid', 'reason', 'details', 'status', 'createdAt'])
+        && isValidId(data.articleId)
+        && (!('articleTitle' in data) || (data.articleTitle is string && data.articleTitle.size() <= 240))
+        && data.reporterUid is string && data.reporterUid == request.auth.uid
+        && data.reason is string && data.reason.size() >= 2 && data.reason.size() <= 120
+        && (!('details' in data) || (data.details is string && data.details.size() <= 1000))
+        && data.status in ['open', 'resolved', 'dismissed']
+        && data.createdAt is timestamp;
+    }
+
+    function isValidPlan(data) {
+      return data.keys().hasAll(['name', 'price', 'currency', 'billingCycle', 'features', 'storageLimitMb', 'isActive', 'updatedAt'])
+        && data.keys().hasOnly(['name', 'description', 'price', 'currency', 'billingCycle', 'features', 'storageLimitMb', 'isActive', 'updatedAt'])
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 120
+        && (!('description' in data) || (data.description is string && data.description.size() <= 500))
+        && data.price is number && data.price >= 0
+        && data.currency in ['MAD', 'USD', 'EUR']
+        && data.billingCycle in ['monthly', 'yearly', 'lifetime']
+        && data.features is list && data.features.size() <= 15 && (data.features.size() == 0 || data.features[0] is string)
+        && data.storageLimitMb is int && data.storageLimitMb >= 0
+        && data.isActive is bool
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll(['userUid', 'userEmail', 'itemType', 'itemId', 'itemTitle', 'amount', 'currency', 'provider', 'status', 'createdAt'])
+        && data.keys().hasOnly(['userUid', 'userEmail', 'itemType', 'itemId', 'itemTitle', 'amount', 'currency', 'provider', 'externalRef', 'status', 'createdAt'])
+        && data.userUid is string && data.userUid.size() >= 1 && data.userUid.size() <= 128
+        && data.userEmail is string && data.userEmail.size() >= 3 && data.userEmail.size() <= 200
+        && data.itemType in ['subscription', 'lesson', 'document']
+        && data.itemId is string && data.itemId.size() >= 1 && data.itemId.size() <= 128
+        && data.itemTitle is string && data.itemTitle.size() >= 1 && data.itemTitle.size() <= 240
+        && data.amount is number && data.amount >= 0
+        && data.currency in ['MAD', 'USD', 'EUR']
+        && data.provider in ['stripe', 'paypal', 'cmi', 'manual']
+        && (!('externalRef' in data) || (data.externalRef is string && data.externalRef.size() <= 200))
+        && data.status in ['pending', 'completed', 'failed', 'refunded']
+        && data.createdAt is timestamp;
+    }
+
+    function isValidPlatformSetting(data) {
+      return data.keys().hasAll(['key', 'isPublic', 'data', 'updatedAt'])
+        && data.keys().hasOnly(['key', 'isPublic', 'data', 'updatedAt'])
+        && data.key is string && data.key.size() >= 1 && data.key.size() <= 80
+        && data.isPublic is bool
+        && data.data is map
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAuditLog(data) {
+      return data.keys().hasAll(['actorUid', 'actorEmail', 'action', 'targetType', 'createdAt'])
+        && data.keys().hasOnly(['actorUid', 'actorEmail', 'action', 'targetType', 'targetId', 'details', 'createdAt'])
+        && data.actorUid is string && data.actorUid == request.auth.uid
+        && data.actorEmail is string && data.actorEmail.size() >= 3 && data.actorEmail.size() <= 200
+        && data.action is string && data.action.size() >= 1 && data.action.size() <= 120
+        && data.targetType is string && data.targetType.size() >= 1 && data.targetType.size() <= 80
+        && (!('targetId' in data) || (data.targetId is string && data.targetId.size() <= 128))
+        && (!('details' in data) || (data.details is string && data.details.size() <= 1000))
+        && data.createdAt is timestamp;
+    }
+
+    // -------------------------------------------------------------------------
+    // Collection Rules
+    // -------------------------------------------------------------------------
+
+    match /users/{uid} {
+      allow get: if isValidId(uid) && (isOwner(uid) || isUserManager());
+      allow list: if isUserManager();
+
+      allow create: if isValidId(uid)
+        && isEmailVerified()
+        && isOwner(uid)
+        && isValidUser(incoming())
+        && incoming().uid == uid
+        && incoming().email == request.auth.token.email
+        && incoming().role == (isMainAdminEmail() ? 'main_admin' : 'ordinary_member')
+        && incoming().permissions.size() == 0
+        && incoming().subscriptionTier == 'free'
+        && incoming().isSuspended == false
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(uid) && isEmailVerified() && isValidUser(incoming()) && (
+        (
+          isMainAdmin()
+          && incoming().uid == existing().uid
+          && incoming().email == existing().email
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && (existing().email != 'berghazi9@gmail.com' || incoming().role == 'main_admin')
+          && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'permissions', 'isSuspended', 'subscriptionTier', 'subscriptionExpiresAt', 'updatedAt'])
+        )
+        ||
+        (
+          hasPerm('manageUsers')
+          && existing().role in ['ordinary_member', 'permanent_member', 'page_writer']
+          && incoming().role in ['ordinary_member', 'permanent_member', 'page_writer']
+          && incoming().uid == existing().uid
+          && incoming().email == existing().email
+          && incoming().permissions == existing().permissions
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'isSuspended', 'updatedAt'])
+        )
+        ||
+        (
+          isOwner(uid)
+          && incoming().uid == existing().uid
+          && incoming().email == existing().email
+          && incoming().role == existing().role
+          && incoming().permissions == existing().permissions
+          && incoming().subscriptionTier == existing().subscriptionTier
+          && incoming().isSuspended == existing().isSuspended
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'schoolName', 'institution', 'academicYear', 'city', 'bio', 'preferredLanguage', 'updatedAt'])
+        )
+      );
+
+      allow delete: if false;
+    }
+
+    match /public_profiles/{uid} {
+      allow get: if isValidId(uid);
+      allow list: if resource.data.uid is string;
+
+      allow create: if isValidId(uid)
+        && isEmailVerified()
+        && isOwner(uid)
+        && isValidPublicProfile(incoming())
+        && incoming().uid == uid
+        && incoming().role == (isMainAdminEmail() ? 'main_admin' : 'ordinary_member')
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(uid) && isEmailVerified() && isValidPublicProfile(incoming()) && (
+        (
+          isMainAdmin()
+          && incoming().uid == existing().uid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'displayName', 'institution', 'bio', 'photoURL', 'updatedAt'])
+        )
+        ||
+        (
+          isUserManager()
+          && existing().role in ['ordinary_member', 'permanent_member', 'page_writer']
+          && incoming().role in ['ordinary_member', 'permanent_member', 'page_writer']
+          && incoming().uid == existing().uid
+          && incoming().displayName == existing().displayName
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'updatedAt'])
+        )
+        ||
+        (
+          isOwner(uid)
+          && incoming().uid == existing().uid
+          && incoming().role == existing().role
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'institution', 'bio', 'photoURL', 'updatedAt'])
+        )
+      );
+
+      allow delete: if false;
+    }
+
+    match /roles/{roleId} {
+      allow get: if isValidId(roleId);
+      allow list: if resource.data.rank is int;
+
+      allow create, update: if isValidId(roleId)
+        && isMainAdmin()
+        && isValidRoleDefinition(incoming())
+        && incoming().id == roleId
+        && incoming().updatedAt == request.time;
+
+      allow delete: if false;
+    }
+
+    match /pathways/{pathwayId} {
+      allow get: if isValidId(pathwayId) && (resource.data.isActive == true || isLessonManager());
+      allow list: if resource.data.isActive == true || isLessonManager();
+
+      allow create, update: if isValidId(pathwayId)
+        && isMainAdmin()
+        && isValidPathway(incoming())
+        && incoming().updatedAt == request.time;
+
+      allow delete: if false;
+    }
+
+    match /lessons/{lessonId} {
+      allow get: if isValidId(lessonId) && (resource.data.isPublished == true || isLessonManager());
+      allow list: if resource.data.isPublished == true || isLessonManager();
+
+      allow create: if isValidId(lessonId)
+        && isLessonManager()
+        && isValidLesson(incoming())
+        && incoming().uploadedByUid == request.auth.uid
+        && incoming().downloadCount == 0
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(lessonId) && isValidLesson(incoming()) && (
+        (
+          isLessonManager()
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['pathway', 'level', 'stage', 'week', 'part', 'title', 'titleZgh', 'titleAr', 'titleEn', 'description', 'fileUrl', 'fileName', 'fileFormat', 'fileSize', 'accessTier', 'price', 'currency', 'allowDownload', 'isPublished', 'updatedAt'])
+        )
+        ||
+        (
+          isSignedIn()
+          && isNotSuspended()
+          && existing().isPublished == true
+          && incoming().downloadCount == existing().downloadCount + 1
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['downloadCount', 'updatedAt'])
+        )
+      );
+
+      allow delete: if isValidId(lessonId) && isLessonManager();
+    }
+
+    match /documents/{documentId} {
+      allow get: if isValidId(documentId) && (resource.data.isPublished == true || isDocumentManager());
+      allow list: if resource.data.isPublished == true || isDocumentManager();
+
+      allow create: if isValidId(documentId)
+        && isDocumentManager()
+        && isValidDocumentTemplate(incoming())
+        && incoming().uploadedByUid == request.auth.uid
+        && incoming().downloadCount == 0
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(documentId) && isValidDocumentTemplate(incoming()) && (
+        (
+          isDocumentManager()
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['docType', 'pathway', 'level', 'week', 'part', 'title', 'description', 'templateFileUrl', 'templateFileName', 'templateFormat', 'accessTier', 'price', 'currency', 'isPublished', 'updatedAt'])
+        )
+        ||
+        (
+          isSignedIn()
+          && isNotSuspended()
+          && existing().isPublished == true
+          && incoming().downloadCount == existing().downloadCount + 1
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['downloadCount', 'updatedAt'])
+        )
+      );
+
+      allow delete: if isValidId(documentId) && isDocumentManager();
+    }
+
+    match /research/{researchId} {
+      allow get: if isValidId(researchId) && (
+        resource.data.status == 'approved'
+        || (isSignedIn() && resource.data.authorUid == request.auth.uid)
+        || isResearchModerator()
+      );
+      allow list: if resource.data.status == 'approved'
+        || (isSignedIn() && resource.data.authorUid == request.auth.uid)
+        || isResearchModerator();
+
+      allow create: if isValidId(researchId)
+        && canSubmitResearch()
+        && isValidResearchArticle(incoming())
+        && incoming().authorUid == request.auth.uid
+        && incoming().likesCount == 0
+        && incoming().commentsCount == 0
+        && incoming().reportsCount == 0
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          incoming().status == 'pending'
+          || (canAutoPublish() && incoming().status == 'approved')
+        );
+
+      allow update: if isValidId(researchId) && isEmailVerified() && isNotSuspended() && isValidResearchArticle(incoming()) && (
+        (
+          isResearchModerator()
+          && incoming().authorUid == existing().authorUid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['kind', 'title', 'abstract', 'content', 'category', 'language', 'publicationDate', 'coverImageUrl', 'attachmentUrl', 'attachmentName', 'referencesText', 'status', 'updatedAt'])
+        )
+        ||
+        (
+          resource.data.authorUid == request.auth.uid
+          && existing().status != 'rejected'
+          && incoming().authorUid == existing().authorUid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && (incoming().status == existing().status || incoming().status == 'pending')
+          && incoming().diff(existing()).affectedKeys().hasOnly(['kind', 'title', 'abstract', 'content', 'category', 'language', 'coverImageUrl', 'attachmentUrl', 'attachmentName', 'referencesText', 'status', 'updatedAt'])
+        )
+        ||
+        (
+          existing().status == 'approved'
+          && (
+            (
+              incoming().likesCount == existing().likesCount + 1
+              && existsAfter(/databases/$(database)/documents/research_likes/$(researchId + '_' + request.auth.uid))
+            )
+            ||
+            (
+              incoming().likesCount == existing().likesCount - 1
+              && !existsAfter(/databases/$(database)/documents/research_likes/$(researchId + '_' + request.auth.uid))
+            )
+          )
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['likesCount', 'updatedAt'])
+        )
+        ||
+        (
+          existing().status == 'approved'
+          && incoming().commentsCount == existing().commentsCount + 1
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['commentsCount', 'updatedAt'])
+        )
+        ||
+        (
+          existing().status == 'approved'
+          && incoming().reportsCount == existing().reportsCount + 1
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['reportsCount', 'updatedAt'])
+        )
+      );
+
+      allow delete: if isValidId(researchId) && (
+        isResearchModerator()
+        || (isEmailVerified() && resource.data.authorUid == request.auth.uid)
+      );
+    }
+
+    match /analytics/{dateKey} {
+      allow get: if isValidId(dateKey) && isAnalyticsViewer();
+      allow list: if isAnalyticsViewer();
+
+      allow create: if isValidId(dateKey)
+        && dateKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && isAnalyticsViewer()
+        && isValidAnalyticsDaily(incoming())
+        && incoming().date == dateKey
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(dateKey)
+        && dateKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && isAnalyticsViewer()
+        && isValidAnalyticsDaily(incoming())
+        && incoming().date == existing().date
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['pageViews', 'downloads', 'adImpressions', 'updatedAt']);
+
+      allow delete: if false;
+    }
+
+    match /research_comments/{commentId} {
+      allow get: if isValidId(commentId);
+      allow list: if resource.data.articleId is string;
+
+      allow create: if isValidId(commentId)
+        && isEmailVerified()
+        && isNotSuspended()
+        && isValidComment(incoming())
+        && incoming().createdAt == request.time
+        && get(/databases/$(database)/documents/research/$(incoming().articleId)).data.status == 'approved';
+
+      allow update: if false;
+      allow delete: if isValidId(commentId) && (
+        isResearchModerator()
+        || (isEmailVerified() && resource.data.authorUid == request.auth.uid)
+      );
+    }
+
+    match /research_likes/{likeId} {
+      allow get: if isValidId(likeId) && isSignedIn() && (resource == null || resource.data.userUid == request.auth.uid);
+      allow list: if isSignedIn() && resource.data.userUid == request.auth.uid;
+
+      allow create: if isValidId(likeId)
+        && isEmailVerified()
+        && isNotSuspended()
+        && isValidLike(incoming())
+        && likeId == (incoming().articleId + '_' + request.auth.uid)
+        && incoming().createdAt == request.time
+        && get(/databases/$(database)/documents/research/$(incoming().articleId)).data.status == 'approved';
+
+      allow update: if false;
+      allow delete: if isValidId(likeId) && isEmailVerified() && resource.data.userUid == request.auth.uid;
+    }
+
+    match /bookmarks/{bookmarkId} {
+      allow get: if isValidId(bookmarkId) && isSignedIn() && (resource == null || resource.data.userUid == request.auth.uid);
+      allow list: if isSignedIn() && resource.data.userUid == request.auth.uid;
+
+      allow create: if isValidId(bookmarkId)
+        && isEmailVerified()
+        && isValidBookmark(incoming())
+        && bookmarkId == (request.auth.uid + '_' + incoming().itemType + '_' + incoming().itemId)
+        && incoming().createdAt == request.time;
+
+      allow update: if false;
+      allow delete: if isValidId(bookmarkId) && isEmailVerified() && resource.data.userUid == request.auth.uid;
+    }
+
+    match /reports/{reportId} {
+      allow get: if isValidId(reportId) && isResearchModerator();
+      allow list: if isResearchModerator();
+
+      allow create: if isValidId(reportId)
+        && isEmailVerified()
+        && isNotSuspended()
+        && isValidReport(incoming())
+        && incoming().status == 'open'
+        && incoming().createdAt == request.time
+        && get(/databases/$(database)/documents/research/$(incoming().articleId)).data.status == 'approved';
+
+      allow update: if isValidId(reportId)
+        && isResearchModerator()
+        && isValidReport(incoming())
+        && incoming().createdAt == existing().createdAt
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status']);
+
+      allow delete: if isValidId(reportId) && isResearchModerator();
+    }
+
+    match /subscription_plans/{planId} {
+      allow get: if isValidId(planId) && (resource.data.isActive == true || isMonetizationManager());
+      allow list: if resource.data.isActive == true || isMonetizationManager();
+
+      allow create: if isValidId(planId)
+        && isMonetizationManager()
+        && isValidPlan(incoming())
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(planId)
+        && isMonetizationManager()
+        && isValidPlan(incoming())
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'price', 'currency', 'billingCycle', 'features', 'storageLimitMb', 'isActive', 'updatedAt']);
+
+      allow delete: if isValidId(planId) && isMonetizationManager();
+    }
+
+    match /transactions/{txId} {
+      allow get: if isValidId(txId) && isSignedIn() && (resource.data.userUid == request.auth.uid || isMonetizationManager());
+      allow list: if isSignedIn() && (resource.data.userUid == request.auth.uid || isMonetizationManager());
+
+      allow create: if isValidId(txId)
+        && isEmailVerified()
+        && isValidTransaction(incoming())
+        && incoming().userUid == request.auth.uid
+        && incoming().status == 'pending'
+        && incoming().createdAt == request.time;
+
+      allow update: if isValidId(txId)
+        && isMonetizationManager()
+        && isValidTransaction(incoming())
+        && incoming().createdAt == existing().createdAt
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'externalRef']);
+
+      allow delete: if false;
+    }
+
+    match /platform_settings/{settingId} {
+      allow get: if isValidId(settingId) && (resource == null || resource.data.isPublic == true || isAdminAny());
+      allow list: if resource.data.isPublic == true || isAdminAny();
+
+      allow create: if isValidId(settingId)
+        && (isMainAdmin() || hasPerm('manageAds') || hasPerm('manageMonetization') || hasPerm('manageDesign') || hasPerm('manageTranslations'))
+        && isValidPlatformSetting(incoming())
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(settingId)
+        && (isMainAdmin() || hasPerm('manageAds') || hasPerm('manageMonetization') || hasPerm('manageDesign') || hasPerm('manageTranslations'))
+        && isValidPlatformSetting(incoming())
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['isPublic', 'data', 'updatedAt']);
+
+      allow delete: if isValidId(settingId) && isMainAdmin();
+    }
+
+    match /audit_logs/{logId} {
+      allow get: if isValidId(logId) && isMainAdmin();
+      allow list: if isMainAdmin();
+
+      allow create: if isValidId(logId)
+        && isAdminAny()
+        && isValidAuditLog(incoming())
+        && incoming().createdAt == request.time;
+
+      allow update: if false;
+      allow delete: if false;
+    }
+  }
+}

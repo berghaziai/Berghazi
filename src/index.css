@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-display: 'Fraunces', 'Cairo', 'Noto Sans Tifinagh', Georgia, serif;
+    --font-sans: 'Plus Jakarta Sans', 'Cairo', 'Noto Sans Tifinagh', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+    --font-tifinagh: 'Noto Sans Tifinagh', 'Plus Jakarta Sans', sans-serif;
+    --font-arabic: 'Cairo', 'Plus Jakarta Sans', sans-serif;
+  }
+
+  html {
+    font-family: var(--font-sans);
+    scroll-behavior: smooth;
+  }
+
+  html[lang="ar"] {
+    font-family: var(--font-arabic);
+  }
+
+  html[lang="zgh"] {
+    font-family: var(--font-tifinagh);
+  }
+
+  h1, h2, .font-display {
+    font-family: var(--font-display);
+    text-wrap: balance;
+  }
+
+  html[lang="ar"] h1,
+  html[lang="ar"] h2,
+  html[lang="ar"] .font-display {
+    font-family: var(--font-arabic);
+  }
+
+  html[lang="zgh"] h1,
+  html[lang="zgh"] h2,
+  html[lang="zgh"] .font-display {
+    font-family: var(--font-tifinagh);
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.font-tifinagh {
+  font-family: var(--font-tifinagh);
+}
+
+.font-mono-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  .print-only-sheet {
+    box-shadow: none !important;
+    border: none !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  body {
+    background: #ffffff !important;
+  }
+}

@@ -1,0 +1,358 @@
+{
+  "entities": {
+    "UserPrivate": {
+      "title": "UserPrivate",
+      "description": "Private user account record including PII, RBAC role, permissions, and subscription tier.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "maxLength": 200 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "photoURL": { "type": "string", "maxLength": 500 },
+        "role": { "type": "string", "enum": ["main_admin", "assistant_admin", "page_writer", "permanent_member", "ordinary_member"] },
+        "permissions": { "type": "object" },
+        "schoolName": { "type": "string", "maxLength": 160 },
+        "institution": { "type": "string", "maxLength": 160 },
+        "academicYear": { "type": "string", "maxLength": 32 },
+        "city": { "type": "string", "maxLength": 100 },
+        "bio": { "type": "string", "maxLength": 1000 },
+        "subscriptionTier": { "type": "string", "enum": ["free", "premium", "institutional"] },
+        "subscriptionExpiresAt": { "type": "string", "maxLength": 64 },
+        "isSuspended": { "type": "boolean" },
+        "preferredLanguage": { "type": "string", "enum": ["zgh", "ar", "en"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "displayName", "role", "subscriptionTier", "isSuspended", "preferredLanguage", "createdAt", "updatedAt"]
+    },
+    "PublicProfile": {
+      "title": "PublicProfile",
+      "description": "Publicly visible author and community profile without PII.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "role": { "type": "string", "enum": ["main_admin", "assistant_admin", "page_writer", "permanent_member", "ordinary_member"] },
+        "institution": { "type": "string", "maxLength": 160 },
+        "bio": { "type": "string", "maxLength": 1000 },
+        "photoURL": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "displayName", "role", "createdAt", "updatedAt"]
+    },
+    "RoleDefinition": {
+      "title": "RoleDefinition",
+      "description": "RBAC role definition and default capability metadata managed by the Main Administrator.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "enum": ["main_admin", "assistant_admin", "page_writer", "permanent_member", "ordinary_member"] },
+        "labelEn": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "labelAr": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "labelZgh": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 500 },
+        "rank": { "type": "integer" },
+        "defaultPermissions": { "type": "object" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "labelEn", "labelAr", "labelZgh", "rank", "defaultPermissions", "updatedAt"]
+    },
+    "Pathway": {
+      "title": "Pathway",
+      "description": "Educational pathway structure (1-6) metadata including levels, weeks, and parts without preloaded lessons.",
+      "type": "object",
+      "properties": {
+        "number": { "type": "integer" },
+        "titleEn": { "type": "string", "minLength": 1, "maxLength": 140 },
+        "titleAr": { "type": "string", "minLength": 1, "maxLength": 140 },
+        "titleZgh": { "type": "string", "minLength": 1, "maxLength": 140 },
+        "description": { "type": "string", "maxLength": 600 },
+        "levels": { "type": "array" },
+        "weeksCount": { "type": "integer" },
+        "partsCount": { "type": "integer" },
+        "isActive": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["number", "titleEn", "titleAr", "titleZgh", "levels", "weeksCount", "partsCount", "isActive", "updatedAt"]
+    },
+    "Lesson": {
+      "title": "Lesson",
+      "description": "Official administrator-uploaded educational lesson mapped to pathway, level, stage, week, and part.",
+      "type": "object",
+      "properties": {
+        "pathway": { "type": "integer" },
+        "level": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "stage": { "type": "integer" },
+        "week": { "type": "integer" },
+        "part": { "type": "integer" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "titleZgh": { "type": "string", "maxLength": 200 },
+        "titleAr": { "type": "string", "maxLength": 200 },
+        "titleEn": { "type": "string", "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "fileUrl": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "fileName": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "fileFormat": { "type": "string", "enum": ["pdf", "pptx", "docx", "image", "other"] },
+        "fileSize": { "type": "integer" },
+        "accessTier": { "type": "string", "enum": ["public_free", "registered_free", "paid_single", "premium_only"] },
+        "price": { "type": "number" },
+        "currency": { "type": "string", "enum": ["MAD", "USD", "EUR"] },
+        "allowDownload": { "type": "boolean" },
+        "isPublished": { "type": "boolean" },
+        "downloadCount": { "type": "integer" },
+        "uploadedByUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "uploadedByName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["pathway", "level", "week", "part", "title", "fileUrl", "fileName", "fileFormat", "accessTier", "allowDownload", "isPublished", "downloadCount", "uploadedByUid", "uploadedByName", "createdAt", "updatedAt"]
+    },
+    "DocumentTemplate": {
+      "title": "DocumentTemplate",
+      "description": "Administrator-uploaded educational document template for Mind Maps, Annual Distributions, and Periodic Distributions.",
+      "type": "object",
+      "properties": {
+        "docType": { "type": "string", "enum": ["mind_map", "annual_distribution", "periodic_distribution"] },
+        "pathway": { "type": "integer" },
+        "level": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "week": { "type": "integer" },
+        "part": { "type": "integer" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "templateFileUrl": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "templateFileName": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "templateFormat": { "type": "string", "enum": ["png", "jpg", "svg", "pdf", "docx", "pptx"] },
+        "accessTier": { "type": "string", "enum": ["public_free", "registered_free", "paid_single", "premium_only"] },
+        "price": { "type": "number" },
+        "currency": { "type": "string", "enum": ["MAD", "USD", "EUR"] },
+        "isPublished": { "type": "boolean" },
+        "downloadCount": { "type": "integer" },
+        "uploadedByUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["docType", "pathway", "level", "week", "part", "title", "templateFileUrl", "templateFileName", "templateFormat", "accessTier", "isPublished", "downloadCount", "uploadedByUid", "createdAt", "updatedAt"]
+    },
+    "ResearchArticle": {
+      "title": "ResearchArticle",
+      "description": "Scientific research or Amazigh cultural publication submitted by community members or writers.",
+      "type": "object",
+      "properties": {
+        "kind": { "type": "string", "enum": ["research", "culture"] },
+        "title": { "type": "string", "minLength": 3, "maxLength": 240 },
+        "authorUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "authorName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "abstract": { "type": "string", "minLength": 10, "maxLength": 1500 },
+        "content": { "type": "string", "minLength": 20, "maxLength": 30000 },
+        "category": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "language": { "type": "string", "enum": ["zgh", "ar", "en"] },
+        "publicationDate": { "type": "string", "maxLength": 40 },
+        "coverImageUrl": { "type": "string", "maxLength": 1000 },
+        "attachmentUrl": { "type": "string", "maxLength": 1000 },
+        "attachmentName": { "type": "string", "maxLength": 255 },
+        "referencesText": { "type": "string", "maxLength": 4000 },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "likesCount": { "type": "integer" },
+        "commentsCount": { "type": "integer" },
+        "reportsCount": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["kind", "title", "authorUid", "authorName", "abstract", "content", "category", "language", "publicationDate", "status", "likesCount", "commentsCount", "reportsCount", "createdAt", "updatedAt"]
+    },
+    "AnalyticsDaily": {
+      "title": "AnalyticsDaily",
+      "description": "Daily aggregated platform analytics counters including visits, downloads, and ad impressions.",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "minLength": 10, "maxLength": 10 },
+        "pageViews": { "type": "integer" },
+        "downloads": { "type": "integer" },
+        "adImpressions": { "type": "integer" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["date", "pageViews", "downloads", "adImpressions", "updatedAt"]
+    },
+    "ResearchComment": {
+      "title": "ResearchComment",
+      "description": "Comment on a research publication.",
+      "type": "object",
+      "properties": {
+        "articleId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "authorUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "authorName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "content": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["articleId", "authorUid", "authorName", "content", "createdAt"]
+    },
+    "ResearchLike": {
+      "title": "ResearchLike",
+      "description": "Unique user like record for a research article.",
+      "type": "object",
+      "properties": {
+        "articleId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["articleId", "userUid", "createdAt"]
+    },
+    "Bookmark": {
+      "title": "Bookmark",
+      "description": "Saved bookmark owned by a registered user.",
+      "type": "object",
+      "properties": {
+        "userUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "itemId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "itemType": { "type": "string", "enum": ["research", "lesson", "document"] },
+        "title": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userUid", "itemId", "itemType", "title", "createdAt"]
+    },
+    "ContentReport": {
+      "title": "ContentReport",
+      "description": "User report flagging inappropriate research content for moderation.",
+      "type": "object",
+      "properties": {
+        "articleId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "articleTitle": { "type": "string", "maxLength": 240 },
+        "reporterUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "reason": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "details": { "type": "string", "maxLength": 1000 },
+        "status": { "type": "string", "enum": ["open", "resolved", "dismissed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["articleId", "reporterUid", "reason", "status", "createdAt"]
+    },
+    "SubscriptionPlan": {
+      "title": "SubscriptionPlan",
+      "description": "Configurable premium membership plan managed by Main Administrator.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "description": { "type": "string", "maxLength": 500 },
+        "price": { "type": "number" },
+        "currency": { "type": "string", "enum": ["MAD", "USD", "EUR"] },
+        "billingCycle": { "type": "string", "enum": ["monthly", "yearly", "lifetime"] },
+        "features": { "type": "array" },
+        "storageLimitMb": { "type": "integer" },
+        "isActive": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "price", "currency", "billingCycle", "features", "storageLimitMb", "isActive", "updatedAt"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Recorded purchase or subscription payment transaction.",
+      "type": "object",
+      "properties": {
+        "userUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "userEmail": { "type": "string", "format": "email", "maxLength": 200 },
+        "itemType": { "type": "string", "enum": ["subscription", "lesson", "document"] },
+        "itemId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "itemTitle": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "amount": { "type": "number" },
+        "currency": { "type": "string", "enum": ["MAD", "USD", "EUR"] },
+        "provider": { "type": "string", "enum": ["stripe", "paypal", "cmi", "manual"] },
+        "externalRef": { "type": "string", "maxLength": 200 },
+        "status": { "type": "string", "enum": ["pending", "completed", "failed", "refunded"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userUid", "userEmail", "itemType", "itemId", "itemTitle", "amount", "currency", "provider", "status", "createdAt"]
+    },
+    "PlatformSetting": {
+      "title": "PlatformSetting",
+      "description": "Publicly or administratively configurable platform settings for design, ads, translations, and monetization.",
+      "type": "object",
+      "properties": {
+        "key": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "isPublic": { "type": "boolean" },
+        "data": { "type": "object" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["key", "isPublic", "data", "updatedAt"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Immutable administrative activity audit log.",
+      "type": "object",
+      "properties": {
+        "actorUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "actorEmail": { "type": "string", "maxLength": 200 },
+        "action": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "targetType": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "targetId": { "type": "string", "maxLength": 128 },
+        "details": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["actorUid", "actorEmail", "action", "targetType", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": { "$ref": "#/entities/UserPrivate" },
+      "description": "Private user account documents containing email, RBAC role, granular permissions, and subscription status."
+    },
+    "/public_profiles/{uid}": {
+      "schema": { "$ref": "#/entities/PublicProfile" },
+      "description": "Publicly readable author and member profile details without PII."
+    },
+    "/roles/{roleId}": {
+      "schema": { "$ref": "#/entities/RoleDefinition" },
+      "description": "RBAC role metadata and capability definitions."
+    },
+    "/pathways/{pathwayId}": {
+      "schema": { "$ref": "#/entities/Pathway" },
+      "description": "Six educational pathways configuration and structural metadata."
+    },
+    "/lessons/{lessonId}": {
+      "schema": { "$ref": "#/entities/Lesson" },
+      "description": "Official educational lessons across Pathways 1-6 uploaded solely by authorized administrators."
+    },
+    "/documents/{documentId}": {
+      "schema": { "$ref": "#/entities/DocumentTemplate" },
+      "description": "Administrator-uploaded original templates for Mind Maps, Annual Distributions, and Periodic Distributions."
+    },
+    "/research/{researchId}": {
+      "schema": { "$ref": "#/entities/ResearchArticle" },
+      "description": "Community scientific research and Amazigh cultural heritage publications."
+    },
+    "/analytics/{dateKey}": {
+      "schema": { "$ref": "#/entities/AnalyticsDaily" },
+      "description": "Daily aggregated platform analytics metrics."
+    },
+    "/research_comments/{commentId}": {
+      "schema": { "$ref": "#/entities/ResearchComment" },
+      "description": "Member comments on research publications."
+    },
+    "/research_likes/{likeId}": {
+      "schema": { "$ref": "#/entities/ResearchLike" },
+      "description": "Per-user likes on research publications."
+    },
+    "/bookmarks/{bookmarkId}": {
+      "schema": { "$ref": "#/entities/Bookmark" },
+      "description": "Personal saved bookmarks per user."
+    },
+    "/reports/{reportId}": {
+      "schema": { "$ref": "#/entities/ContentReport" },
+      "description": "Inappropriate content reports queued for moderation."
+    },
+    "/subscription_plans/{planId}": {
+      "schema": { "$ref": "#/entities/SubscriptionPlan" },
+      "description": "Admin-managed premium membership plans."
+    },
+    "/transactions/{txId}": {
+      "schema": { "$ref": "#/entities/Transaction" },
+      "description": "Subscription and paid document transaction ledger."
+    },
+    "/platform_settings/{settingId}": {
+      "schema": { "$ref": "#/entities/PlatformSetting" },
+      "description": "Platform configuration documents (theme, ads, payment public keys, multilingual overrides)."
+    },
+    "/audit_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Immutable administrative security and action logs."
+    }
+  }
+}

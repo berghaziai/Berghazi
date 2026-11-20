@@ -1,0 +1,6 @@
+{
+  "name": "Berghazi",
+  "description": "Multilingual Amazigh educational platform featuring six structured learning pathways, customizable mind map and distribution documents, academic research community, cultural heritage archive, and role-based administration.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
